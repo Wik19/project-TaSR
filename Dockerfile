@@ -1,16 +1,35 @@
-FROM osrf/ros:humble-desktop
+FROM ros:humble-ros-base
 
-SHELL ["/bin/bash", "-c"]
+# 1. Set the workspace location (Matches entrypoint.sh)
+WORKDIR /colcon_ws
 
-WORKDIR /app
+# 2. Install build tools
+RUN apt-get update && apt-get install -y \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    git \
+    ros-humble-rqt* \
+    ros-humble-rviz2 \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY src project-tasr/src
+# 3. Copy your local source code into the container
+#    (Assumes your host folder has a 'src' folder containing the driver)
+COPY src /colcon_ws/src
 
-RUN apt-get update && rosdep update && rosdep install -i --from-paths project-tasr/src --rosdistro humble -y
-RUN cd project-tasr && source /opt/ros/humble/setup.bash && colcon build
+# 4. Install dependencies
+RUN . /opt/ros/humble/setup.sh && \
+    apt-get update && \
+    rosdep init || echo "rosdep already initialized" && \
+    rosdep update && \
+    rosdep install --from-paths src --ignore-src -y
 
-COPY entrypoint.sh / 
+# 5. Build the workspace (Note: We are already in /colcon_ws)
+RUN . /opt/ros/humble/setup.sh && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 
-ENTRYPOINT [ "/entrypoint.sh" ]
+# 6. Setup Entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
-CMD [ "bash" ]
+CMD ["bash"]
